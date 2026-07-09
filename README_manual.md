@@ -558,7 +558,142 @@ curl http://localhost:80/ - без ошибки
 
 curl http://localhost:80/abababab - c ошибкой
 
+## Снятие потабличного бекапа Mysql Replica и выгрузка на GitHub
+
 Важно! Настройку Mysql Replica смотреть в первом блоке, после настройки Mysql Master
+
+Войдите в пользователя root, выполнив команду _sudo su_ и выполните следующие команды:
+
+mkdir mysql_backup
+
+cd /home/berd/mysql_backup
+
+Вносим изменения в конфигурацию БД
+
+mysql -u root -p
+
+SET GLOBAL read_only = OFF;
+
+Сначала принудительно обновляем пароль (это свяжет пользователя в памяти MySQL 8)
+
+ALTER USER 'wp_test'@'%' IDENTIFIED BY '0000';
+
+Выдаем права на базу данных
+
+GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES ON wordpress_db.* TO 'wp_test'@'%';
+
+GRANT RELOAD ON *.* TO 'wp_test'@'%';
+
+Выдаем права репликации
+
+GRANT REPLICATION CLIENT ON *.* TO 'wp_test'@'%';
+
+Применяем изменения
+
+FLUSH PRIVILEGES;
+
+SET GLOBAL read_only = ON;
+
+EXIT;
+
+Устанавливаем Гит и создаем репозиторий на гитхаб
+
+apt install git -y
+
+git config --global user.name "Alex"
+
+git config --global user.email "berdnikow.ksit@mail.ru"
+
+ssh-keygen -t ed25519
+
+скопироввать и занести ключ в аккаунт гитхаба
+
+cat  /root/.ssh/id_ed25519.pub 
+
+( password Iridium_@1 )
+
+Создать репозиторий https://github.com/AlexIridium/mysql_backup_replica
+
+Склонировать через SSH
+
+git clone git@github.com:AlexIridium/mysql_backup_replica.git
+
+запрос изменений с гитхаба
+
+git pull 
+
+Создание скрипта на снятие бекапа и выгрузку на гитхаб
+
+nano backup_mysql.sh
+
+Скопировать конфиг ниже
+
+#########################################################
+(шибанг строка)#!/bin/bash
+
+(коментарий)# Настройки подключения к MySQL
+USER="wp_test"
+PASSWORD="0000"
+DB_NAME="wordpress_db"
+
+(коментарий)# Пути к папкам и репозиторию
+REPO_DIR="/home/berd/mysql_backup/mysql_backup_replica"
+BACKUP_DIR="$REPO_DIR/backup_files"
+
+(коментарий)# 1. Подготовка локального репозитория
+mkdir -p "$BACKUP_DIR"
+cd "$REPO_DIR"
+
+(коментарий)# Перестраховка: если папка еще не инициализирована как git-репозиторий
+if [ ! -d ".git" ]; then
+    git init
+    git remote add origin https://github.com
+    git branch -M main
+fi
+
+(коментарий)# Очищаем старые бэкапы внутри папки репозитория перед созданием новых
+rm -f "$BACKUP_DIR"/*.sql
+
+(коментарий)# 2. Получаем точный список всех таблиц из базы данных
+TABLES=$(mysql -u"$USER" -p"$PASSWORD" -Bse "SHOW TABLES FROM $DB_NAME")
+
+echo "Начало потабличного бэкапа базы $DB_NAME..."
+
+for TABLE in $TABLES; do
+    echo "Резервное копирование таблицы: $TABLE"
+
+    (коментарий)# Флаг --no-tablespaces убирает ошибку PROCESS прав в MySQL 8.0
+    mysqldump -u"$USER" -p"$PASSWORD" \
+        --source-data=2 \ #позиция бинлога
+        --single-transaction \
+        --skip-lock-tables \
+        --no-tablespaces \
+        "$DB_NAME" "$TABLE" > "$BACKUP_DIR/${DB_NAME}_${TABLE}.sql"
+done
+
+echo "Бэкап в папку $BACKUP_DIR успешно завершен!"
+
+(коментарий)# 3. Автоматическая отправка изменений на GitHub.com
+echo "Синхронизация с GitHub репозиторием..."
+git add .
+git commit -m "Auto-backup: $(date '+%Y-%m-%d %H:%M:%S') (MySQL Replica)"
+git push origin main
+
+echo "Все изменения успешно выгружены на GitHub!"
+
+###################################################################
+
+chmod +x backup_mysql.sh
+
+Испольнить скрипт
+
+./backup_mysql.sh
+
+Убедится, что файлы выгрузились в репозиторий https://github.com/AlexIridium/mysql_backup_replica
+
+
+
+
 
 
 
