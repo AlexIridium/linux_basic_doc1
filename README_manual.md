@@ -1,6 +1,6 @@
 # Инструкция по устранению неисправностей или аварийному восстановлению серверов "с нуля"
 
-#### Данная инструкция предназначена для технического персонала
+#### Данная инструкция предназначена для технического персонала. Подразумевается, что все необходимые пакеты-файлы, неогбходимые для установки, дополнительно хранятся отдельно на другом ПК. Технический персонал об этом знает.
 #### Важно! Вся веб инфраструктура основана на работе двух серверов/двух виртуальных машин (ВМ). Данные сервера/ВМ находятся в одной сети и имеют доступ в интернет. Общая схема инфраструктуры:
 
 *вставить картинку*
@@ -135,6 +135,11 @@ SHOW MASTER STATUS;
 exit;
 
 На втором сервере/ВМ установить БД MySQL. 
+
+apt install mysql-server-8.0
+
+systemctl status mysql
+
 Настройка конфига Replica сервера/ВМ, выполнить команды и внести изменения в конфиг
 
 cd /etc/mysql/mysql.conf.d/
@@ -341,17 +346,219 @@ stress --cpu 1 --vm 2 --vm-bytes 512M --timeout 3600s
 
 ## Установка и конфигурирование ELK Stack
 
+Войдите в пользователя root, выполнив команду _sudo su_
+
 Важно! Выполнять пункты строго в указанном порядке.
 
 apt update
 
+Перекопировать в папку /home/berd/elk следующие файлы-пакеты
+
+- elasticsearch_8.17.1_amd64-224190-db972d.deb
+
+- filebeat_8.17.1_amd64-224190-a5f894.deb
+
+- kibana_8.17.1_amd64-224190-42bf22.deb
+
+- logstash_8.17.1_amd64-224190-40c12c.deb
+
+cd /home/berd/elk
+
+Установка набора инструментов для разработки программ на языке Java
+
+apt install default-jdk
+
+Установка elasticsearch
+
+dpkg -i elasticsearch_8.17.1_amd64-224190-db972d.deb
+
+Устанавливаем лимиты памяти для виртуальной машины Java
+
+-Xms1g
+
+-Xmx1g
+
+(Ctrl+D чтобы сохранить в выйти)
+
+Настраиваем конфигурацию 
 
 
+nano /etc/elasticsearch/elasticsearch.yml
 
+#######################################
 
+path.data: /var/lib/elasticsearch
+path.logs: /var/log/elasticsearch
 
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false
 
+xpack.security.http.ssl:
+  enabled: false
+  keystore.path: certs/http.p12
 
+xpack.security.transport.ssl:
+  enabled: false
+  verification_mode: certificate
+  keystore.path: certs/transport.p12
+  truststore.path: certs/transport.p12
+cluster.initial_master_nodes: ["elk"]
+
+http.host: 0.0.0.0
+
+############################################
+
+Перезагружаем демоны и устанавливаем elasticsearch в автозагрузку 
+
+systemctl daemon-reload
+
+systemctl enable --now elasticsearch.service
+
+systemctl status elasticsearch.service
+
+Проверка
+
+curl http://localhost:9200
+
+## Установка и конфигурирование kibana
+
+Войдите в пользователя root, выполнив команду _sudo su_ и выполните следующие команды:
+
+dpkg -i kibana_8.17.1_amd64-224190-42bf22.deb
+
+systemctl daemon-reload
+
+systemctl enable --now kibana.service
+
+nano /etc/kibana/kibana.yml
+
+#######################################
+
+server.port: 5601
+
+server.host: "0.0.0.0"
+
+#######################################
+
+systemctl restart kibana
+
+## Установка и конфигурирование logstash
+
+Войдите в пользователя root, выполнив команду _sudo su_ и выполните следующие команды:
+
+dpkg -i logstash_8.17.1_amd64-224190-40c12c.deb
+
+systemctl enable --now logstash.service
+
+Внесем изменения в кофигурацию:
+
+nano /etc/logstash/logstash.yml
+
+########################################
+
+path.config: /etc/logstash/conf.d
+
+#######################################
+
+создадим конфиг
+
+cat > /etc/logstash/conf.d/logstash-nginx-es.conf
+
+####################################################
+
+input {
+    beats {
+        port => 5400
+    }
+}
+
+filter {
+ grok {
+   match => [ "message" , "%{COMBINEDAPACHELOG}+%{GREEDYDATA:extra_fields}"]
+   overwrite => [ "message" ]
+ }
+ mutate {
+   convert => ["response", "integer"]
+   convert => ["bytes", "integer"]
+   convert => ["responsetime", "float"]
+ }
+ date {
+   match => [ "timestamp" , "dd/MMM/YYYY:HH:mm:ss Z" ]
+   remove_field => [ "timestamp" ]
+ }
+ useragent {
+   source => "agent"
+ }
+}
+
+output {
+ elasticsearch {
+   hosts => ["http://localhost:9200"]
+   #cacert => '/etc/logstash/certs/http_ca.crt'
+   #ssl => true
+   index => "weblogs-%{+YYYY.MM.dd}"
+   document_type => "nginx_logs"
+ }
+ stdout { codec => rubydebug }
+}
+
+########################################################
+
+systemctl restart logstash.service
+
+## Установка и конфигурирование filebeat
+
+Войдите в пользователя root, выполнив команду _sudo su_ и выполните следующие команды:
+
+dpkg -i filebeat_8.17.1_amd64-224190-a5f894.deb
+
+Изменим конфиг 
+
+nano /etc/filebeat/filebeat.yml
+
+##########################################
+
+filebeat.inputs:
+- type: filestream
+  paths:
+    - /var/log/nginx/*.log
+
+  enabled: true
+  exclude_files: ['.gz$']
+  prospector.scanner.exclude_files: ['.gz$']
+
+Закомментарить блок output.elasticsearch и прописать там
+
+output.logstash:
+  hosts: ["localhost:5400"]
+  
+###########################################
+
+systemctl restart filebeat
+
+Открыть в браузере http://ip-адрес_сервера:5601/ Убедится, что страница открылась.
+
+Пройти Stack Management --> Index Management --> убедится, что в списке имеется файл с логами 'weblogs'
+
+Пройти Analytics --> Discover --> Create Data View --> Придумываем название, вводим шаблон weblogs-* --> Save data view
+
+Убедится, что Кибана подгрузила события с логами. Отправить запросы и посмотреть логи nginx
+
+curl http://localhost:80/ - без ошибки
+
+curl http://localhost:80/abababab - c ошибкой
+
+curl http://localhost:80/123123123 - c ошибкой
+
+Для запуска визуализации пройти Analytics --> Dashboards --> Create dashboard --> Create visualization --> Добавить Bar-график (по вертикали Count of records, по горизонтали host.ip.keyword или url.oroginal.keyword) --> Save
+
+Протестировать
+
+curl http://localhost:80/ - без ошибки
+
+curl http://localhost:80/abababab - c ошибкой
+
+Важно! Настройку Mysql Replica смотреть в первом блоке, после настройки Mysql Master
 
 
 
