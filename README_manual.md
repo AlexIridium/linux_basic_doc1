@@ -5,6 +5,8 @@
 
 *вставить картинку*
 
+## Сервер №1 / Виртуальная машина №1
+
 ## Установка и конфигурирование frontend web сервера (NGINX)
 
 Войдите в пользователя root, выполнив команду _sudo su_, и выполните следующие команды:
@@ -287,6 +289,64 @@ git log
 git branch
 
 ## Установка и конфигурирование мониторинга (Prometheus и Grafana)
+
+Войдите в пользователя root, выполнив команду _sudo su_, и выполните следующие команды:
+
+apt install prometheus
+
+Проверка работы. Ввести каманду в терминале
+
+curl localhost:9100/metrics
+
+Должны появится метрики. Либо в браузере ввести
+
+http://ip-адрес_сервера:9100/
+
+Должна открыться страница "Node Exporter. Metrics"
+
+Установка зависимостей
+
+apt-get install -y adduser libfontconfig1 musl
+
+Скопировать на сервер в папку /home/berd/grafana_dpkg файл grafana_12.3.3_21957728731_linux_amd64-224190-b33d09.deb
+
+chmod -R +x /home/berd/grafana_dpkg
+
+cd /home/berd/grafana_dpkg
+
+dpkg -i grafana_12.3.3_21957728731_linux_amd64-224190-b33d09.deb
+
+systemctl start grafana-server
+
+По умолчанию Графана работает на 3000 порту. Проверить в браузере
+
+http://ip-адрес_сервера:3000/
+
+По умолчанию логин и пароль admin, admin
+
+Перейти в Connetions --> Data sourses --> Выбрать "Prometheus". В строку Prometheus server URL ввести http://localhost:9090, остальное оставить по умолчанию. Save & test
+
+Перейти в Dashboards --> Import Dashboard --> *пройти на сайт https://grafana.com/grafana/dashboards/ и выбрать необходимы дашборд, в наше случае ID Dashbord 1860* --> * скопировать ID Dashbord в строку Find and import dashboards и нажать Load * . Отобразится панель Node Exporter Full, моторая и является мониторингом состояния сервера/ВМ.
+
+Тестрирование графаны
+
+apt install stress
+
+stress --cpu 1 --vm 2 --vm-bytes 512M --timeout 3600s
+
+Увидим в браузере как изменяются характеристики сервера/ВМ.
+
+
+## Сервер №2 / Виртуальная машина №2
+
+## Установка и конфигурирование ELK Stack
+
+Важно! Выполнять пункты строго в указанном порядке.
+
+apt update
+
+
+
 
 
 
