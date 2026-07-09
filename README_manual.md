@@ -185,8 +185,108 @@ exit;
 
 
 
+## Установка и конфигурирование WordPress
+
+Войдите в пользователя root, выполнив команду _sudo su_, и выполните следующие команды:
+
+apt install php php-curl php-gd php-mbstring php-xml php-xmlrpc php-soap php-intl php-zip php-mysql -y
+
+systemctl restart apache2
+
+В БД задать следующие настройки
+
+mysql
+
+CREATE DATABASE wordpress_db DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;
+
+CREATE USER 'wp_test'@'localhost' IDENTIFIED BY '0000';
+
+GRANT ALL PRIVILEGES ON wordpress_db.* TO 'wp_test'@'localhost';
+
+SET GLOBAL read_only = OFF;
+
+SET GLOBAL super_read_only = OFF;
+
+FLUSH PRIVILEGES;
+
+EXIT;
+
+cd /tmp && curl -L https://wordpress.org/latest.tar.gz -o latest.tar.gz
+
+tar -xvf latest.tar.gz
+
+sudo mkdir -p /var/www/wordpress
+
+sudo cp -a /tmp/wordpress/. /var/www/wordpress/
+
+sudo chown -R www-data:www-data /var/www/wordpress
+
+sudo find /var/www/wordpress/ -type d -exec chmod 755 {} \;
+
+sudo find /var/www/wordpress/ -type f -exec chmod 644 {} \;
+
+cp -r wordpress/ wordpress1/
+
+# nano wp-config.php сделать выписку из конфига
+
+define( 'DB_NAME', 'db_name' );
+define( 'DB_USER', 'db_user' );
+define( 'DB_PASSWORD', 'password' );
+
+Откройте браузер и перейдите к IP-адресу вашего сервера (команда ip -br a). Вы увидите экран приветствия WordPress. Заполните данные о сайте, создайте учетную запись администратора и нажмите «Установить WordPress».
+
+Должна отобразится страница "Привет мир"
 
 
+## Установка и конфигурирование GIT
+
+Войдите в пользователя root, выполнив команду _sudo su_, и выполните следующие команды:
+
+apt install git -y
+
+git config --global user.name "Alex"
+
+git config --global user.email "berdnikow.ksit@mail.ru"
+
+git config --list
+
+ssh-keygen -t ed25519
+
+Скопировать ключ и занести в аккаунт гитхаба https://github.com/AlexIridium
+
+cat  /root/.ssh/id_ed25519.pub 
+
+(password Iridium_@1)
+
+Далее выполняем
+
+git clone git@github.com:AlexIridium/linux_project.git
+
+git pull #запрос изменений с гитхаба
+
+# Сюда вписать скрипт гита chmod +x backup_to_git.sh /home/berd/git_repo/linux_basic_doc1
+
+Дополнительно для мебя можно проверить отправку файлов на гит
+
+cat > file_from_server  (ctrl+D сохранить)
+
+git add file_from_server
+
+git commit -m 'file_from_server'
+
+Отправка файла на гитхаб
+
+git push
+
+Список полезных команд:
+
+git remote -v
+
+git log
+
+git branch
+
+## Установка и конфигурирование мониторинга (Prometheus и Grafana)
 
 
 
